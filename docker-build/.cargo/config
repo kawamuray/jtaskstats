@@ -1,0 +1,10 @@
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source."https://github.com/kawamuray/taskstats-rs"]
+git = "https://github.com/kawamuray/taskstats-rs"
+branch = "master"
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "docker-build/vendor"

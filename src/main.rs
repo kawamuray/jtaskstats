@@ -1,35 +1,37 @@
 use clap::{App, Arg};
-use jni::objects::{JObject, JValue};
-use jni::sys::{jlong, jobject, jobjectArray};
-use jni::{InitArgsBuilder, JNIEnv, JavaVM};
 use std::collections::HashMap;
 use std::env;
-use std::io::{self, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::process;
+use std::process::{self, Command, Stdio};
 use taskstats::cmd;
-use taskstats::format::{HeaderFormat, Printer};
-use taskstats::Client;
+use taskstats::format::HeaderFormat;
 use tempfile::{self, NamedTempFile};
+
+const JTHREAD_INFO_HEADER: &str = "Thread ";
 
 fn error_exit(msg: &str) -> ! {
     eprintln!("Error: {}", msg);
     process::exit(1);
 }
 
-fn jdi_jar_path() -> PathBuf {
+fn java_home() -> String {
     if let Ok(java_home) = env::var("JAVA_HOME") {
-        let path = PathBuf::from(format!("{}/lib/sa-jdi.jar", java_home));
-        if !path.exists() {
-            error_exit(&format!(
-                "required sa-jdi.jar could not found in {:?}",
-                path
-            ));
-        }
-        return path;
+        java_home
     } else {
         error_exit("JAVA_HOME is not set");
     }
+}
+
+fn jdi_jar_path() -> PathBuf {
+    let path = PathBuf::from(format!("{}/lib/sa-jdi.jar", java_home()));
+    if !path.exists() {
+        error_exit(&format!(
+            "required sa-jdi.jar could not found in {:?}",
+            path
+        ));
+    }
+    path
 }
 
 fn prepare_jthreadinfo_jar() -> NamedTempFile {
@@ -44,52 +46,51 @@ fn prepare_jthreadinfo_jar() -> NamedTempFile {
     file
 }
 
-fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, jni::errors::Error> {
+fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, io::Error> {
     let jthreadinfo_jar = prepare_jthreadinfo_jar();
-    let jvm_args = InitArgsBuilder::new()
-        .option(&format!(
-            "-Djava.class.path={}:{}",
-            jthreadinfo_jar.as_ref().to_str().unwrap(),
-            jdi_jar_path().to_str().unwrap(),
-        ))
-        .build()
-        .expect("build jvm args");
-    let jvm = JavaVM::new(jvm_args)?;
-    let env = jvm.attach_current_thread()?;
+    let mut child = Command::new(format!("{}/bin/java", java_home()))
+        .args(&[
+            "-cp",
+            &format!(
+                "{}:{}",
+                jthreadinfo_jar.as_ref().to_str().unwrap(),
+                jdi_jar_path().to_str().unwrap()
+            ),
+        ])
+        .arg("jthreadinfo.JThreadInfo")
+        .arg(pid.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+    let reader = BufReader::new(child.stdout.take().unwrap());
 
-    let threads = env
-        .call_static_method(
-            "jthreadinfo/JThreadInfo",
-            "listThreads",
-            "(I)[Ljthreadinfo/ThreadInfo;",
-            &[JValue::from(pid as i32)],
-        )?
-        .l()
-        .expect("listThreads must return jobject")
-        .into_inner() as jobjectArray;
-    let len = env.get_array_length(threads)?;
-    let mut mapping = HashMap::with_capacity(len as usize);
-    for i in 0..len {
-        let info = env.get_object_array_element(threads, i)?;
-        let tid = env
-            .get_field(info, "tid", "J")?
-            .j()
-            .expect("tid must be long");
-        let nid = env
-            .get_field(info, "nid", "J")?
-            .j()
-            .expect("nid must be long");
-        let name = env
-            .get_field(info, "name", "Ljava/lang/String;")?
-            .l()
-            .expect("name must be jobject");
-        let name: String = env.get_string(name.into())?.into();
-        let is_java = env
-            .call_method(info, "isJavaThread", "()Z", &[])?
-            .z()
-            .expect("isJavaThread must return boolean");
+    let mut mapping = HashMap::new();
+    for line in reader.lines() {
+        let line = line?;
+        if !line.starts_with(JTHREAD_INFO_HEADER) {
+            continue;
+        }
+        match line.splitn(4, ' ').collect::<Vec<_>>().as_slice() {
+            &[_, nid, tid, name] => {
+                let nid: u32 = nid.parse().expect("parse nid");
+                let tid: i64 = tid.parse().expect("parse tid");
+                let name = name.to_owned();
+                mapping.insert(
+                    nid,
+                    ThreadInfo {
+                        tid,
+                        name,
+                        is_java: tid != 0,
+                    },
+                );
+            }
+            _ => panic!("corrupted line from jthreadinfo: {}", line),
+        }
+    }
 
-        mapping.insert(nid as u32, ThreadInfo { tid, name, is_java });
+    let status = child.wait()?;
+    if !status.success() {
+        error_exit("jthreadinfo exit with failure");
     }
 
     Ok(mapping)
@@ -118,10 +119,11 @@ fn main() {
         )),
     };
 
-    let tids: Vec<_> = mapping
+    let mut tids: Vec<_> = mapping
         .iter()
         .filter_map(|(k, v)| if v.is_java { Some(*k) } else { None })
         .collect();
+    tids.sort_unstable();
     let config = cmd::Config {
         tids,
         verbose: matches.is_present("verbose"),
@@ -144,9 +146,9 @@ struct JavaHeaderFormat<'a> {
 impl<'a> HeaderFormat for JavaHeaderFormat<'a> {
     fn format(&self, tid: u32) -> String {
         if let Some(info) = self.mapping.get(&tid) {
-            format!("Thread {} (nid: {}) - {}", info.tid, tid, info.name)
+            format!("{} Thread {} - {}", tid, info.tid, info.name)
         } else {
-            format!("Thread UNKNOWN (nid: {})", tid)
+            format!("{} Thread UNKNOWN", tid)
         }
     }
 }

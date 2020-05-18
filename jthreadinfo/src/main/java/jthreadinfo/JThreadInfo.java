@@ -32,7 +32,7 @@ public class JThreadInfo extends Tool {
     @Override
     public void run() {
         for (ThreadInfo info : collectThreadsInfo()) {
-            System.out.printf("Thread %d, nid=%d - %s\n", info.tid, info.nid, info.name);
+            System.out.printf("Thread %d %d %s\n", info.nid, info.tid, info.name);
         }
     }
 

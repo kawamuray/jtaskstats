@@ -11,10 +11,9 @@ RUN apt-get update && apt-get install -y curl llvm-dev libclang-dev gcc
 WORKDIR /jtaskstats
 
 COPY --from=jthreadinfo /usr/local/openjdk-8 /usr/local/openjdk-8
+COPY --from=jthreadinfo /root/.gradle /root/.gradle
 ENV JAVA_HOME /usr/local/openjdk-8
 ENV LD_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server
-
-RUN apt-get install -y strace
 
 COPY --from=rust /usr/local/rustup /usr/local/rustup
 COPY --from=rust /usr/local/cargo /usr/local/cargo

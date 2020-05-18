@@ -8,3 +8,4 @@ edition = "2018"
 jni = { version = "0.16.0", features = ["invocation"] }
 taskstats = { git = "https://github.com/kawamuray/taskstats-rs" , rev = "fd831d551e0b8e5aca269adf071b1c75d51046ac" }
 clap = "2.33.1"
+tempfile = "3.1.0"

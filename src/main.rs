@@ -4,12 +4,13 @@ use jni::sys::{jlong, jobject, jobjectArray};
 use jni::{InitArgsBuilder, JNIEnv, JavaVM};
 use std::collections::HashMap;
 use std::env;
-use std::io;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process;
 use taskstats::cmd;
 use taskstats::format::{HeaderFormat, Printer};
 use taskstats::Client;
+use tempfile::{self, NamedTempFile};
 
 fn error_exit(msg: &str) -> ! {
     eprintln!("Error: {}", msg);
@@ -31,10 +32,24 @@ fn jdi_jar_path() -> PathBuf {
     }
 }
 
+fn prepare_jthreadinfo_jar() -> NamedTempFile {
+    let mut file = tempfile::Builder::new()
+        .prefix("jtaskstats-jthreadinfo")
+        .suffix(".jar")
+        .rand_bytes(6)
+        .tempfile()
+        .expect("create tempfile for extracting jar");
+    file.write(include_bytes!("../jthreadinfo/build/libs/jthreadinfo.jar"))
+        .expect("write jthreadinfo jar");
+    file
+}
+
 fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, jni::errors::Error> {
+    let jthreadinfo_jar = prepare_jthreadinfo_jar();
     let jvm_args = InitArgsBuilder::new()
         .option(&format!(
-            "-Djava.class.path=./jthreadinfo/build/libs/jthreadinfo.jar:{}",
+            "-Djava.class.path={}:{}",
+            jthreadinfo_jar.as_ref().to_str().unwrap(),
             jdi_jar_path().to_str().unwrap(),
         ))
         .build()
@@ -84,7 +99,7 @@ fn main() {
     let matches = App::new("A command line interface to Linux taskstats for JVM")
         .arg(Arg::with_name("verbose").short("v").long("verbose"))
         .arg(Arg::with_name("show-delays").short("d").long("delay"))
-        .arg(Arg::with_name("JVM_PID").index(1))
+        .arg(Arg::with_name("JVM_PID").index(1).required(true))
         .get_matches();
 
     let pid = matches.value_of("JVM_PID").unwrap();

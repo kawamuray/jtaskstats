@@ -9,7 +9,4 @@ if [ ! -d $root_dir/docker-build/vendor ]; then
 fi
 
 echo "Building ..."
-docker run --rm -v $root_dir:/jtaskstats -v $root_dir/docker-build/.cargo:/jtaskstats/.cargo jtaskstats-build:latest cargo build
-
-echo "Running tests ..."
-docker run --rm --cap-add SYS_PTRACE -v $root_dir:/jtaskstats -v $root_dir/docker-build/.cargo:/jtaskstats/.cargo jtaskstats-build:latest cargo test
+docker run --rm -v $root_dir:/jtaskstats -v $root_dir/docker-build/.cargo:/jtaskstats/.cargo jtaskstats-build:latest ./build.sh

@@ -8,6 +8,4 @@ sleep 5
 
 export RUST_BACKTRACE=full
 
-cp ./docker-build/target/debug/jtaskstats /tmp/jtaskstats
-/sbin/setcap cap_net_admin+ep /tmp/jtaskstats
-/tmp/jtaskstats $(jobs -p)
+./docker-build/target/x86_64-unknown-linux-musl/debug/jtaskstats $(jobs -p)

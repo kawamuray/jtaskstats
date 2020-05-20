@@ -6,7 +6,7 @@ FROM debian:buster
 
 MAINTAINER Yuto Kawamura
 
-RUN apt-get update && apt-get install -y curl llvm-dev libclang-dev gcc
+RUN apt-get update && apt-get install -y curl llvm-dev libclang-dev gcc musl-tools
 
 WORKDIR /jtaskstats
 
@@ -21,5 +21,7 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
     RUST_VERSION=1.43.1
+
+RUN rustup target add x86_64-unknown-linux-musl
 
 CMD cargo test

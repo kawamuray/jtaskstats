@@ -1,10 +1,23 @@
 language: rust
 rust:
 - stable
+# We need to keep using this dist to make oraclejdk8 installation work.
+# https://travis-ci.community/t/install-of-oracle-jdk-8-failing/3038/9
+dist: trusty
 jdk:
 - oraclejdk8
 before_install:
 - sudo apt-get install -y curl llvm-dev libclang-dev gcc musl-tools
+- jdk_switcher use "oraclejdk8"
+# https://docs.travis-ci.com/user/languages/java/#caching
+before_cache:
+  - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
+  - rm -fr $HOME/.gradle/caches/*/plugin-resolution/
+cache:
+- cargo
+- directories:
+  - $HOME/.gradle/caches/
+  - $HOME/.gradle/wrapper/
 script: ./build.sh
 before_deploy:
 - .travis/build-musl-bin-dist.sh

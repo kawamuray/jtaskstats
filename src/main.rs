@@ -10,6 +10,63 @@ use tempfile::{self, NamedTempFile};
 
 const JTHREAD_INFO_HEADER: &str = "Thread ";
 
+fn main() {
+    let matches = App::new("A command line interface to Linux taskstats for JVM")
+        .arg(Arg::with_name("verbose").short("v").long("verbose"))
+        .arg(Arg::with_name("show-delays").short("d").long("delay"))
+        .arg(Arg::with_name("JVM_PID").index(1).required(true))
+        .get_matches();
+
+    let pid = matches.value_of("JVM_PID").unwrap();
+    let pid = match pid.parse::<u32>() {
+        Ok(pid) => pid,
+        Err(_) => {
+            eprintln!("Invalid PID: {}", pid);
+            process::exit(1);
+        }
+    };
+    let mapping = match get_jvm_threads(pid) {
+        Ok(mapping) => mapping,
+        Err(e) => error_exit(&format!(
+            "failed to get threads info from target JVM: {}",
+            e
+        )),
+    };
+
+    let mut tids: Vec<_> = mapping
+        .iter()
+        .filter_map(|(k, v)| if v.is_java { Some(*k) } else { None })
+        .collect();
+    tids.sort_unstable();
+    let config = cmd::Config {
+        tids,
+        verbose: matches.is_present("verbose"),
+        show_delays: matches.is_present("show-delays"),
+        header_format: JavaHeaderFormat { mapping: &mapping },
+    };
+    cmd::taskstats_main(config);
+}
+
+struct ThreadInfo {
+    tid: i64,
+    name: String,
+    is_java: bool,
+}
+
+struct JavaHeaderFormat<'a> {
+    mapping: &'a HashMap<u32, ThreadInfo>,
+}
+
+impl<'a> HeaderFormat for JavaHeaderFormat<'a> {
+    fn format(&self, tid: u32) -> String {
+        if let Some(info) = self.mapping.get(&tid) {
+            format!("{} Thread {} - {}", tid, info.tid, info.name)
+        } else {
+            format!("{} Thread UNKNOWN", tid)
+        }
+    }
+}
+
 fn error_exit(msg: &str) -> ! {
     eprintln!("Error: {}", msg);
     process::exit(1);
@@ -94,61 +151,4 @@ fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, io::Error> {
     }
 
     Ok(mapping)
-}
-
-fn main() {
-    let matches = App::new("A command line interface to Linux taskstats for JVM")
-        .arg(Arg::with_name("verbose").short("v").long("verbose"))
-        .arg(Arg::with_name("show-delays").short("d").long("delay"))
-        .arg(Arg::with_name("JVM_PID").index(1).required(true))
-        .get_matches();
-
-    let pid = matches.value_of("JVM_PID").unwrap();
-    let pid = match pid.parse::<u32>() {
-        Ok(pid) => pid,
-        Err(_) => {
-            eprintln!("Invalid PID: {}", pid);
-            process::exit(1);
-        }
-    };
-    let mapping = match get_jvm_threads(pid) {
-        Ok(mapping) => mapping,
-        Err(e) => error_exit(&format!(
-            "failed to get threads info from target JVM: {}",
-            e
-        )),
-    };
-
-    let mut tids: Vec<_> = mapping
-        .iter()
-        .filter_map(|(k, v)| if v.is_java { Some(*k) } else { None })
-        .collect();
-    tids.sort_unstable();
-    let config = cmd::Config {
-        tids,
-        verbose: matches.is_present("verbose"),
-        show_delays: matches.is_present("show-delays"),
-        header_format: JavaHeaderFormat { mapping: &mapping },
-    };
-    cmd::taskstats_main(config);
-}
-
-struct ThreadInfo {
-    tid: i64,
-    name: String,
-    is_java: bool,
-}
-
-struct JavaHeaderFormat<'a> {
-    mapping: &'a HashMap<u32, ThreadInfo>,
-}
-
-impl<'a> HeaderFormat for JavaHeaderFormat<'a> {
-    fn format(&self, tid: u32) -> String {
-        if let Some(info) = self.mapping.get(&tid) {
-            format!("{} Thread {} - {}", tid, info.tid, info.name)
-        } else {
-            format!("{} Thread UNKNOWN", tid)
-        }
-    }
 }

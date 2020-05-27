@@ -1,11 +1,11 @@
 use clap::{App, Arg};
+use linux_taskstats::cmd;
+use linux_taskstats::format::HeaderFormat;
 use std::collections::HashMap;
 use std::env;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{self, Command, Stdio};
-use taskstats::cmd;
-use taskstats::format::HeaderFormat;
 use tempfile::{self, NamedTempFile};
 
 const JTHREAD_INFO_HEADER: &str = "Thread ";
@@ -98,7 +98,7 @@ fn prepare_jthreadinfo_jar() -> NamedTempFile {
         .rand_bytes(6)
         .tempfile()
         .expect("create tempfile for extracting jar");
-    file.write(include_bytes!("../jthreadinfo/build/libs/jthreadinfo.jar"))
+    file.write_all(include_bytes!("../jthreadinfo/build/libs/jthreadinfo.jar"))
         .expect("write jthreadinfo jar");
     file
 }
@@ -128,10 +128,10 @@ fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, io::Error> {
             continue;
         }
         match line.splitn(4, ' ').collect::<Vec<_>>().as_slice() {
-            &[_, nid, tid, name] => {
+            [_, nid, tid, name] => {
                 let nid: u32 = nid.parse().expect("parse nid");
                 let tid: i64 = tid.parse().expect("parse tid");
-                let name = name.to_owned();
+                let name = (*name).to_owned();
                 mapping.insert(
                     nid,
                     ThreadInfo {

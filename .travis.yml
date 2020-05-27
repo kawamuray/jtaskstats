@@ -1,0 +1,19 @@
+language: rust
+rust:
+- stable
+jdk:
+- oraclejdk8
+before_install:
+- sudo apt-get install -y curl llvm-dev libclang-dev gcc musl-tools
+script: ./build.sh
+before_deploy:
+- .travis/build-musl-bin-dist.sh
+deploy:
+  provider: releases
+  api_key:
+    secure: XvA050loHv178cLAPElLVykPkUQjcuKp6W1mb2WarblTRAiRI/9QVqaxNxylAZDVCYPmki6gkl9CjYBoUvtM/wsbZKRpIsKSxHKhrmw3SIWf5Z+PXS6KNU+aTWGJLB4rFH2cWGV7787IdPNI6rs8Cx5YVKCjfPw/OSbj85lKiIyMmCaT19pbOn4598XsCqH6076paQURJkRTTxfP2H+zhWGGUKwK8vvlFoCjzFJf+PJEl844H0xhsvB1FMXwHK5p40iAUh+20robuRu1D/GfnDaw49xUNVF4qmyIovk017pjgM3yfRvTYaXDw+if9hahF6OLcvldc0AXTAfQmlI6donHVneBW1gX6PZOeugtD4IR4mB4IK0on9GfilQmDu5+UBucaUi0RGgA5qqQL2Rx5vM2/XJrKfG2ZYibqHEZ1ffjZUAQTpSMqRS136tMxn1CO05NkOVeLmmx6/We2rWS0WlFbBwOXPw1TVaDkEMYfnAYSGJ/V+jfUFuhbRLm6rY4BHnABTvPnMaxvq1ktmU5tc8VhMZPjBtEi45ADpQirbiyjFYkER7n8PuYf83YJ/dDERcZ3PnLWph2MH1Xh23YpsFwdyAcb8vti+GA2ogV4eVpEgfpu2mSKhD6PrzFUKfZw5Pj3X9BGKRqBDgDUFW1gwCoRmmZEBoHJEdceBMtR80=
+  file_glob: true
+  file: jtaskstats-*.gz
+  skip_cleanup: true
+  on:
+    tags: true

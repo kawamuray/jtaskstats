@@ -3,6 +3,10 @@ name = "jtaskstats"
 version = "0.1.0"
 authors = ["Yuto Kawamura <kawamuray.dadada@gmail.com>"]
 edition = "2018"
+license = "MIT"
+description = "Linux taskstats applied for JVM threads"
+repository = "https://github.com/kawamuray/jtaskstats"
+readme = "README.md"
 
 [dependencies]
 clap = "2.33.1"

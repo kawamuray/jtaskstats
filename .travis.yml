@@ -4,10 +4,9 @@ rust:
 # We need to keep using this dist to make oraclejdk8 installation work.
 # https://travis-ci.community/t/install-of-oracle-jdk-8-failing/3038/9
 dist: trusty
-jdk:
-- oraclejdk8
 before_install:
 - sudo apt-get install -y curl llvm-dev libclang-dev gcc musl-tools
+# Travis doesn't supports multiple languages (hence SDKs) so install jdk manually
 - jdk_switcher use "oraclejdk8"
 # https://docs.travis-ci.com/user/languages/java/#caching
 before_cache:

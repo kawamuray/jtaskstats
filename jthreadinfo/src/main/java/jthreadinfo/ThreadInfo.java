@@ -10,8 +10,4 @@ public class ThreadInfo {
         this.nid = nid;
         this.name = name;
     }
-
-    public boolean isJavaThread() {
-        return tid != 0;
-    }
 }

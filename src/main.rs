@@ -12,8 +12,23 @@ const JTHREAD_INFO_HEADER: &str = "Thread ";
 
 fn main() {
     let matches = App::new("A command line interface to Linux taskstats for JVM")
-        .arg(Arg::with_name("verbose").short("v").long("verbose"))
-        .arg(Arg::with_name("show-delays").short("d").long("delay"))
+        .arg(
+            Arg::with_name("verbose")
+                .short("v")
+                .long("verbose")
+                .help("Show all available stats for each tasks in verbose style output"),
+        )
+        .arg(
+            Arg::with_name("show-delays")
+                .short("d")
+                .long("delay")
+                .help("Show only delay accounting related stats"),
+        )
+        .arg(
+            Arg::with_name("full-name")
+                .long("full-name")
+                .help("Show full (not-shortend) thread name"),
+        )
         .arg(Arg::with_name("JVM_PID").index(1).required(true))
         .get_matches();
 
@@ -42,7 +57,10 @@ fn main() {
         tids,
         verbose: matches.is_present("verbose"),
         show_delays: matches.is_present("show-delays"),
-        header_format: JavaHeaderFormat { mapping: &mapping },
+        header_format: JavaHeaderFormat {
+            full_name: matches.is_present("full-name"),
+            mapping: &mapping,
+        },
     };
     cmd::taskstats_main(config);
 }
@@ -53,14 +71,39 @@ struct ThreadInfo {
     is_java: bool,
 }
 
+impl ThreadInfo {
+    const MAX_SHORT_NAME_LEN: usize = 50;
+
+    fn short_name(&self) -> String {
+        if self.name.len() > Self::MAX_SHORT_NAME_LEN {
+            let half = Self::MAX_SHORT_NAME_LEN / 2;
+            format!(
+                "{}...{}",
+                &self.name[..(half - "...".len())],
+                &self.name[(self.name.len() - half)..]
+            )
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
 struct JavaHeaderFormat<'a> {
+    full_name: bool,
     mapping: &'a HashMap<u32, ThreadInfo>,
 }
 
 impl<'a> HeaderFormat for JavaHeaderFormat<'a> {
     fn format(&self, tid: u32) -> String {
         if let Some(info) = self.mapping.get(&tid) {
-            format!("{} Thread {} - {}", tid, info.tid, info.name)
+            let short: String;
+            let name = if self.full_name {
+                &info.name
+            } else {
+                short = info.short_name();
+                &short
+            };
+            format!("{} Thread {} - {}", tid, info.tid, name)
         } else {
             format!("{} Thread UNKNOWN", tid)
         }

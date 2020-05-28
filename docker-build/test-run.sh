@@ -9,6 +9,8 @@ public final class SampleMain {
         start("Thread-A");
         start("Thread-B");
         start("Thread-C");
+        start("PartitionProcessorThread-decaton-benchmark-decatonbench-6b97179f-e920-4c92-9e6b-f217345fd4e4-1-11");
+        start("PartitionProcessorThread-decaton-benchmark-decatonbench-6b97179f-e920-4c92-9e6b-f217345fd4e4-0-10");
         Thread.sleep(10000);
     }
 

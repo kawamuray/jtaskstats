@@ -161,6 +161,10 @@ fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, io::Error> {
             child.args(&[
                 "-cp",
                 jthreadinfo_jar.as_ref().to_str().unwrap(),
+                "--add-modules", "jdk.hotspot.agent",
+                "--add-exports", "jdk.hotspot.agent/sun.jvm.hotspot.tools=ALL-UNNAMED",
+                "--add-exports", "jdk.hotspot.agent/sun.jvm.hotspot.runtime=ALL-UNNAMED",
+                "--add-exports", "jdk.hotspot.agent/sun.jvm.hotspot.oops=ALL-UNNAMED"
             ]);
         }
         JdkVersion::Jdk8OrLower => {

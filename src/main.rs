@@ -6,6 +6,7 @@ use std::env;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{self, Command, Stdio};
+use regex::Regex;
 use tempfile::{self, NamedTempFile};
 
 const JTHREAD_INFO_HEADER: &str = "Thread ";
@@ -69,6 +70,11 @@ struct ThreadInfo {
     tid: i64,
     name: String,
     is_java: bool,
+}
+
+enum JdkVersion {
+    Jdk9OrHigher,
+    Jdk8OrLower,
 }
 
 impl ThreadInfo {
@@ -148,15 +154,27 @@ fn prepare_jthreadinfo_jar() -> NamedTempFile {
 
 fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, io::Error> {
     let jthreadinfo_jar = prepare_jthreadinfo_jar();
-    let mut child = Command::new(format!("{}/bin/java", java_home()))
-        .args(&[
-            "-cp",
-            &format!(
-                "{}:{}",
+    let mut child = Command::new(format!("{}/bin/java", java_home()));
+
+    match jdk_version() {
+        JdkVersion::Jdk9OrHigher => {
+            child.args(&[
+                "-cp",
                 jthreadinfo_jar.as_ref().to_str().unwrap(),
-                jdi_jar_path().to_str().unwrap()
-            ),
-        ])
+            ]);
+        }
+        JdkVersion::Jdk8OrLower => {
+            child.args(&[
+                "-cp",
+                &format!(
+                    "{}:{}",
+                    jthreadinfo_jar.as_ref().to_str().unwrap(),
+                    jdi_jar_path().to_str().unwrap(),
+                ),
+            ]);
+        }
+    }
+    child
         .arg("jthreadinfo.JThreadInfo")
         .arg(pid.to_string())
         .stdout(Stdio::piped())
@@ -194,4 +212,26 @@ fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, io::Error> {
     }
 
     Ok(mapping)
+}
+
+fn jdk_version() -> JdkVersion {
+    let output = Command::new(format!("{}/bin/java", java_home()))
+        .arg("-version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("get java version")
+        .stderr;
+    let output = std::str::from_utf8(&output).unwrap();
+    let regex = Regex::new("version \"(.+)\"").unwrap();
+
+    let version_string = &regex
+        .captures(output)
+        .expect("parse output")[1];
+
+    if version_string.starts_with("1.") {
+        JdkVersion::Jdk8OrLower
+    } else {
+        JdkVersion::Jdk9OrHigher
+    }
 }

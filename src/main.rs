@@ -178,7 +178,7 @@ fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, io::Error> {
             ]);
         }
     }
-    child
+    let mut child = child
         .arg("jthreadinfo.JThreadInfo")
         .arg(pid.to_string())
         .stdout(Stdio::piped())

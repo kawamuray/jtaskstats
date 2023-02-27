@@ -41,6 +41,7 @@ jobs:
     - name: Build release binary
       run: ./build-musl-bin-dist.sh
     - name: Create release
+      id: create_release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

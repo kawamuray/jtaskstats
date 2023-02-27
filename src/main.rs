@@ -1,11 +1,12 @@
 use clap::{App, Arg};
-use linux_taskstats::cmd;
-use linux_taskstats::format::HeaderFormat;
+use linux_taskstats::Client;
+use linux_taskstats::format::{HeaderFormat, Printer};
 use std::collections::HashMap;
 use std::env;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{self, Command, Stdio};
+use regex::Regex;
 use tempfile::{self, NamedTempFile};
 
 const JTHREAD_INFO_HEADER: &str = "Thread ";
@@ -53,22 +54,50 @@ fn main() {
         .filter_map(|(k, v)| if v.is_java { Some(*k) } else { None })
         .collect();
     tids.sort_unstable();
-    let config = cmd::Config {
-        tids,
-        verbose: matches.is_present("verbose"),
-        show_delays: matches.is_present("show-delays"),
-        header_format: JavaHeaderFormat {
-            full_name: matches.is_present("full-name"),
-            mapping: &mapping,
-        },
+
+    let mut stats = Vec::new();
+    let client = Client::open().expect("netlink init");
+    for pid in tids {
+        let ts = client.pid_stats(pid).expect("get stats");
+        stats.push(ts);
+    }
+
+    let header_format = JavaHeaderFormat {
+        full_name: matches.is_present("full-name"),
+        mapping: &mapping,
     };
-    cmd::taskstats_main(config);
+
+    let printer = Printer::new(header_format);
+
+    let mut show_line = true;
+    if matches.is_present("verbose") {
+        printer
+            .print_full(&mut io::stdout(), &stats)
+            .expect("write stdout");
+        show_line = false;
+    }
+    if matches.is_present("show-delays") {
+        printer
+            .print_delay_lines(&mut io::stdout(), &stats)
+            .expect("write stdout");
+        show_line = false;
+    }
+    if show_line {
+        printer
+            .print_summary_lines(&mut io::stdout(), &stats)
+            .expect("write stdout");
+    }
 }
 
 struct ThreadInfo {
     tid: i64,
     name: String,
     is_java: bool,
+}
+
+enum JdkVersion {
+    Jdk9OrHigher,
+    Jdk8OrLower,
 }
 
 impl ThreadInfo {
@@ -148,15 +177,31 @@ fn prepare_jthreadinfo_jar() -> NamedTempFile {
 
 fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, io::Error> {
     let jthreadinfo_jar = prepare_jthreadinfo_jar();
-    let mut child = Command::new(format!("{}/bin/java", java_home()))
-        .args(&[
-            "-cp",
-            &format!(
-                "{}:{}",
+    let mut child = Command::new(format!("{}/bin/java", java_home()));
+
+    match jdk_version() {
+        JdkVersion::Jdk9OrHigher => {
+            child.args(&[
+                "-cp",
                 jthreadinfo_jar.as_ref().to_str().unwrap(),
-                jdi_jar_path().to_str().unwrap()
-            ),
-        ])
+                "--add-modules", "jdk.hotspot.agent",
+                "--add-exports", "jdk.hotspot.agent/sun.jvm.hotspot.tools=ALL-UNNAMED",
+                "--add-exports", "jdk.hotspot.agent/sun.jvm.hotspot.runtime=ALL-UNNAMED",
+                "--add-exports", "jdk.hotspot.agent/sun.jvm.hotspot.oops=ALL-UNNAMED"
+            ]);
+        }
+        JdkVersion::Jdk8OrLower => {
+            child.args(&[
+                "-cp",
+                &format!(
+                    "{}:{}",
+                    jthreadinfo_jar.as_ref().to_str().unwrap(),
+                    jdi_jar_path().to_str().unwrap(),
+                ),
+            ]);
+        }
+    }
+    let mut child = child
         .arg("jthreadinfo.JThreadInfo")
         .arg(pid.to_string())
         .stdout(Stdio::piped())
@@ -194,4 +239,26 @@ fn get_jvm_threads(pid: u32) -> Result<HashMap<u32, ThreadInfo>, io::Error> {
     }
 
     Ok(mapping)
+}
+
+fn jdk_version() -> JdkVersion {
+    let output = Command::new(format!("{}/bin/java", java_home()))
+        .arg("-version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("get java version")
+        .stderr;
+    let output = std::str::from_utf8(&output).unwrap();
+    let regex = Regex::new("version \"(.+)\"").unwrap();
+
+    let version_string = &regex
+        .captures(output)
+        .expect("parse output")[1];
+
+    if version_string.starts_with("1.") {
+        JdkVersion::Jdk8OrLower
+    } else {
+        JdkVersion::Jdk9OrHigher
+    }
 }
